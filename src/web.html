@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skill Atlas</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { margin: 0; display: grid; grid-template-rows: auto auto 1fr; height: 100vh; }
+  form { display: flex; gap: .5rem; padding: 1rem; border-bottom: 1px solid #8884; }
+  form input { flex: 1; font: inherit; padding: .4rem .6rem; }
+  form button { font: inherit; padding: .4rem 1rem; }
+  #status { padding: .5rem 1rem; }
+  #status .error { color: #d33; }
+  #warnings { margin: .25rem 0 0; padding-left: 1.25rem; color: #b80; font-size: .9em; }
+  main { display: grid; grid-template-columns: minmax(16rem, 1fr) 2fr; min-height: 0; border-top: 1px solid #8884; }
+  #skills { margin: 0; padding: 0; list-style: none; overflow: auto; border-right: 1px solid #8884; }
+  #skills button { all: unset; box-sizing: border-box; display: block; width: 100%; padding: .6rem 1rem; cursor: pointer; }
+  #skills button:hover, #skills button:focus-visible { background: #8882; }
+  #skills button[aria-current="true"] { background: #48f3; }
+  #skills .name { font-weight: 600; }
+  #skills .description { font-size: .9em; opacity: .8; }
+  #skill { overflow: auto; padding: 1rem; }
+  #skill h2 { margin: 0 0 .25rem; }
+  #skill .meta { font-size: .9em; margin-bottom: .75rem; word-break: break-all; }
+  #skill pre { white-space: pre-wrap; word-wrap: break-word; margin: 0; padding: 1rem; background: #8881; border-radius: 4px; }
+</style>
+</head>
+<body>
+<form id="scan">
+  <input id="repo" name="repo" type="text" required autofocus
+         placeholder="https://github.com/owner/repo, or a local directory" aria-label="Repository">
+  <button type="submit">Scan</button>
+</form>
+<div id="status" role="status"></div>
+<main hidden>
+  <ul id="skills" aria-label="Skills"></ul>
+  <article id="skill"></article>
+</main>
+<script>
+  const form = document.getElementById('scan');
+  const repo = document.getElementById('repo');
+  const status = document.getElementById('status');
+  const main = document.querySelector('main');
+  const list = document.getElementById('skills');
+  const view = document.getElementById('skill');
+
+  function element(tag, properties = {}, ...children) {
+    const node = Object.assign(document.createElement(tag), properties);
+    node.append(...children);
+    return node;
+  }
+
+  function show(skill, button) {
+    for (const other of list.querySelectorAll('button')) other.setAttribute('aria-current', String(other === button));
+    const meta = element('div', { className: 'meta' }, element('a', { href: skill.link, target: '_blank', rel: 'noopener', textContent: skill.path }));
+    if (skill.copies.length > 0) meta.append(element('div', { textContent: `also in ${skill.copies.join(', ')}` }));
+    view.replaceChildren(element('h2', { textContent: skill.name }), meta, element('pre', { textContent: skill.markdown }));
+  }
+
+  async function scan(input) {
+    status.replaceChildren(`Scanning ${input}…`);
+    main.hidden = true;
+    let result;
+    try {
+      const response = await fetch(`/api/scan?repo=${encodeURIComponent(input)}`);
+      result = await response.json();
+    } catch (error) {
+      result = { error: `Cannot reach the Skill Atlas server: ${error.message}` };
+    }
+    if (result.error) return status.replaceChildren(element('span', { className: 'error', textContent: result.error }));
+    const count = `${result.skills.length} ${result.skills.length === 1 ? 'skill' : 'skills'}`;
+    status.replaceChildren(element('strong', { textContent: result.repository.id }), ` · ${count}`);
+    if (result.warnings.length > 0) {
+      status.append(element('ul', { id: 'warnings' }, ...result.warnings.map((warning) => element('li', { textContent: `warning: ${warning}` }))));
+    }
+    list.replaceChildren(...result.skills.map((skill) => {
+      const button = element('button', { type: 'button' }, element('div', { className: 'name', textContent: skill.name }));
+      if (skill.description) button.append(element('div', { className: 'description', textContent: skill.description }));
+      button.addEventListener('click', () => show(skill, button));
+      return element('li', {}, button);
+    }));
+    view.replaceChildren();
+    main.hidden = result.skills.length === 0;
+    if (result.skills.length > 0) show(result.skills[0], list.querySelector('button'));
+  }
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const input = repo.value.trim();
+    history.replaceState(null, '', `?repo=${encodeURIComponent(input)}`);
+    scan(input);
+  });
+
+  // `/?repo=<link>` scans at once, so a scan can be shared as a link.
+  const initial = new URLSearchParams(location.search).get('repo');
+  if (initial) {
+    repo.value = initial;
+    scan(initial);
+  }
+</script>
+</body>
+</html>
