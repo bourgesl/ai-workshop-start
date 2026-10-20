@@ -10,6 +10,13 @@
   - its **link**, pinned to the scanned commit; `also in <paths>` for copies
 - Warnings under the repository; an unreachable repository → its message, in the page
 - `/?repo=<link>` scans at once: a scan can be *shared as a link*
+## Filtering
+- After a successful scan, a field labeled **Filter** filters skill names as you type, using case-insensitive substring matching (contains)
+- An empty value shows every skill; descriptions are not searched
+- Show matching and total counts, including when the repository has no skills
+- A non-empty filter with no matches has a red border and `aria-invalid=true`; matching again or clearing it removes this state
+- Keep the selected skill when it matches; otherwise select the first match, or clear the detail view if there are no matches
+- Keep warnings visible while filtering, and apply the current filter to subsequent scans
 ## API
 `GET /api/scan?repo=<GitHub URL | directory>` → JSON:
 `repository`; `skills`, each with its `link` and `markdown`; `warnings`
