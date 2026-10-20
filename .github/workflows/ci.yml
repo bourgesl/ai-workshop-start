@@ -22,6 +22,14 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      # The web view in Chromium; each test's video and screenshots are kept from docs/tests.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-recordings
+          path: docs/tests
       # The real CLI on the fixture repository, as a user would run it: it must exit 0.
       - name: Smoke test
         run: |

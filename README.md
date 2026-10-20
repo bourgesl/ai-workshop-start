@@ -23,6 +23,8 @@ the remaining repositories still appear. Large accounts can take longer and may 
 `GITHUB_TOKEN` to avoid GitHub's rate limit.
 
 Set `GITHUB_TOKEN` for a higher GitHub rate limit. `npm test` runs the tests.
+`npm run test:e2e` runs the web view in Chromium (`npx playwright install chromium` once) and
+records each test's video and screenshots in `docs/tests`.
 
 - [spec/](spec/): what it does. [AGENTS.md](AGENTS.md): the definition of done.
 - [fixture/](fixture/README.md): a small repository for the tests.
