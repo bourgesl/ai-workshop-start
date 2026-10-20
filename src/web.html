@@ -6,13 +6,17 @@
 <title>Skill Atlas</title>
 <style>
   :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-  body { margin: 0; display: grid; grid-template-rows: auto auto 1fr; height: 100vh; }
+  body { margin: 0; display: grid; grid-template-rows: auto auto auto 1fr; height: 100vh; }
   form { display: flex; gap: .5rem; padding: 1rem; border-bottom: 1px solid #8884; }
   form input { flex: 1; font: inherit; padding: .4rem .6rem; }
   form button { font: inherit; padding: .4rem 1rem; }
   #status { padding: .5rem 1rem; }
   #status .error { color: #d33; }
   #warnings { margin: .25rem 0 0; padding-left: 1.25rem; color: #b80; font-size: .9em; }
+  #filter-controls { display: flex; align-items: center; gap: .5rem; padding: .5rem 1rem; }
+  #filter { font: inherit; padding: .4rem .6rem; }
+  #filter[aria-invalid="true"] { border: 2px solid #d33; }
+  [hidden] { display: none !important; }
   main { display: grid; grid-template-columns: minmax(16rem, 1fr) 2fr; min-height: 0; border-top: 1px solid #8884; }
   #skills { margin: 0; padding: 0; list-style: none; overflow: auto; border-right: 1px solid #8884; }
   #skills button { all: unset; box-sizing: border-box; display: block; width: 100%; padding: .6rem 1rem; cursor: pointer; }
@@ -33,6 +37,11 @@
   <button type="submit">Scan</button>
 </form>
 <div id="status" role="status"></div>
+<div id="filter-controls" hidden>
+  <label for="filter">Filter</label>
+  <input id="filter" name="filter" type="text" aria-describedby="counts" aria-invalid="false">
+  <span id="counts" role="status"></span>
+</div>
 <main hidden>
   <ul id="skills" aria-label="Skills"></ul>
   <article id="skill"></article>
@@ -44,6 +53,11 @@
   const main = document.querySelector('main');
   const list = document.getElementById('skills');
   const view = document.getElementById('skill');
+  const controls = document.getElementById('filter-controls');
+  const filter = document.getElementById('filter');
+  const counts = document.getElementById('counts');
+  let skills = [];
+  let selected;
 
   function element(tag, properties = {}, ...children) {
     const node = Object.assign(document.createElement(tag), properties);
@@ -52,15 +66,36 @@
   }
 
   function show(skill, button) {
+    selected = skill;
     for (const other of list.querySelectorAll('button')) other.setAttribute('aria-current', String(other === button));
     const meta = element('div', { className: 'meta' }, element('a', { href: skill.link, target: '_blank', rel: 'noopener', textContent: skill.path }));
     if (skill.copies.length > 0) meta.append(element('div', { textContent: `also in ${skill.copies.join(', ')}` }));
     view.replaceChildren(element('h2', { textContent: skill.name }), meta, element('pre', { textContent: skill.markdown }));
   }
 
+  function renderSkills() {
+    const query = filter.value.toLowerCase();
+    const matches = skills.filter((skill) => skill.name.toLowerCase().includes(query));
+    counts.textContent = `${matches.length} of ${skills.length} skills`;
+    filter.setAttribute('aria-invalid', String(query.length > 0 && matches.length === 0));
+    list.replaceChildren(...matches.map((skill) => {
+      const button = element('button', { type: 'button' }, element('div', { className: 'name', textContent: skill.name }));
+      if (skill.description) button.append(element('div', { className: 'description', textContent: skill.description }));
+      button.addEventListener('click', () => show(skill, button));
+      return element('li', {}, button);
+    }));
+    selected = matches.includes(selected) ? selected : matches[0];
+    view.replaceChildren();
+    if (selected) show(selected, list.children[matches.indexOf(selected)].querySelector('button'));
+    main.hidden = matches.length === 0;
+  }
+
+  filter.addEventListener('input', renderSkills);
+
   async function scan(input) {
     status.replaceChildren(`Scanning ${input}…`);
     main.hidden = true;
+    controls.hidden = true;
     let result;
     try {
       const response = await fetch(`/api/scan?repo=${encodeURIComponent(input)}`);
@@ -74,15 +109,10 @@
     if (result.warnings.length > 0) {
       status.append(element('ul', { id: 'warnings' }, ...result.warnings.map((warning) => element('li', { textContent: `warning: ${warning}` }))));
     }
-    list.replaceChildren(...result.skills.map((skill) => {
-      const button = element('button', { type: 'button' }, element('div', { className: 'name', textContent: skill.name }));
-      if (skill.description) button.append(element('div', { className: 'description', textContent: skill.description }));
-      button.addEventListener('click', () => show(skill, button));
-      return element('li', {}, button);
-    }));
-    view.replaceChildren();
-    main.hidden = result.skills.length === 0;
-    if (result.skills.length > 0) show(result.skills[0], list.querySelector('button'));
+    skills = result.skills;
+    selected = undefined;
+    controls.hidden = false;
+    renderSkills();
   }
 
   form.addEventListener('submit', (event) => {

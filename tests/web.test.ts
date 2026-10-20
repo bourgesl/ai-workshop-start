@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
+import { JSDOM } from 'jsdom';
 import type { Repository, Skill } from '../src/core/model.ts';
 import { createWebServer, listen } from '../src/web.ts';
 import { CLI, EXAMPLE_COMMIT, FIXTURE, open } from './helpers.ts';
@@ -29,6 +30,106 @@ async function scanned(repo: string) {
   const response = await fetch(`${base}/api/scan?repo=${encodeURIComponent(repo)}`);
   return { status: response.status, body: (await response.json()) as Scanned };
 }
+
+/** Execute the served page, with its requests reaching the real scan API. */
+async function page(t: { after: (fn: () => void) => void }, repository = FIXTURE) {
+  const html = await (await fetch(base)).text();
+  const dom = new JSDOM(html, {
+    url: `${base}/?repo=${encodeURIComponent(repository)}`,
+    runScripts: 'dangerously',
+    beforeParse(window) {
+      window.fetch = (input, init) => fetch(new URL(String(input), base), init);
+    },
+  });
+  t.after(() => dom.window.close());
+  const document = dom.window.document;
+  await until(() => !document.getElementById('filter-controls')!.hidden);
+  const filter = document.querySelector<HTMLInputElement>('#filter')!;
+  return {
+    dom, document, filter,
+    names: () => Array.from(document.querySelectorAll('#skills .name'), (node) => node.textContent),
+    counts: () => document.getElementById('counts')!.textContent,
+    selected: () => document.querySelector('#skill h2')?.textContent,
+    input(value: string) {
+      filter.value = value;
+      filter.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    },
+  };
+}
+
+async function until(condition: () => boolean) {
+  const deadline = Date.now() + 5000;
+  while (!condition()) {
+    assert.ok(Date.now() < deadline, 'page did not finish scanning');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+test('Filter matches names by case-insensitive substring; empty shows all and warnings stay visible', async (t) => {
+  const ui = await page(t);
+  assert.equal(ui.document.querySelector('label[for="filter"]')?.textContent, 'Filter');
+  assert.deepEqual(ui.names(), ['code-style', 'commits', 'release-checklist']);
+  assert.equal(ui.counts(), '3 of 3 skills');
+  assert.equal(ui.selected(), 'code-style');
+  ui.input('MIT');
+  assert.deepEqual(ui.names(), ['commits']);
+  assert.equal(ui.counts(), '1 of 3 skills');
+  assert.equal(ui.selected(), 'commits');
+  assert.equal(ui.document.querySelectorAll('#warnings li').length, 1);
+  ui.input('');
+  assert.equal(ui.names().length, 3);
+  assert.equal(ui.counts(), '3 of 3 skills');
+  assert.equal(ui.selected(), 'commits');
+  const buttons = ui.document.querySelectorAll<HTMLButtonElement>('#skills button');
+  buttons[2].click();
+  ui.input('check');
+  assert.equal(ui.selected(), 'release-checklist');
+  assert.equal(ui.document.querySelector('#skills button[aria-current="true"] .name')?.textContent, 'release-checklist');
+});
+
+test('no name matches: red field, zero count, cleared details; matching or clearing recovers', async (t) => {
+  const ui = await page(t);
+  for (const value of ['Write commit messages', 'no-such-skill']) {
+    ui.input(value);
+    assert.deepEqual(ui.names(), []);
+    assert.equal(ui.counts(), '0 of 3 skills');
+    assert.equal(ui.document.getElementById('skill')!.textContent, '');
+    assert.equal(ui.filter.getAttribute('aria-invalid'), 'true');
+    assert.equal(ui.dom.window.getComputedStyle(ui.filter).borderTopColor, 'rgb(221, 51, 51)');
+    ui.input(value === 'Write commit messages' ? 'style' : '');
+    assert.equal(ui.filter.getAttribute('aria-invalid'), 'false');
+    assert.notEqual(ui.dom.window.getComputedStyle(ui.filter).borderTopColor, 'rgb(221, 51, 51)');
+    assert.equal(ui.selected(), 'code-style');
+  }
+});
+
+test('current filter applies to subsequent repository scans', async (t) => {
+  const ui = await page(t);
+  ui.input('style');
+  ui.document.querySelector<HTMLInputElement>('#repo')!.value = 'https://github.com/JetBrains/example';
+  ui.document.getElementById('scan')!.dispatchEvent(new ui.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await until(() => !ui.document.getElementById('filter-controls')!.hidden);
+  assert.equal(ui.counts(), '0 of 1 skills');
+  assert.deepEqual(ui.names(), []);
+  assert.equal(ui.filter.getAttribute('aria-invalid'), 'true');
+  ui.input('');
+  assert.deepEqual(ui.names(), ['commits']);
+  assert.equal(ui.counts(), '1 of 1 skills');
+  assert.equal(ui.selected(), 'commits');
+});
+
+test('repository with no skills keeps filter and zero counts available', async (t) => {
+  const empty = mkdtempSync(join(tmpdir(), 'skill-atlas-empty-'));
+  t.after(() => rmSync(empty, { recursive: true, force: true }));
+  const ui = await page(t, empty);
+  assert.equal(ui.counts(), '0 of 0 skills');
+  assert.deepEqual(ui.names(), []);
+  assert.equal(ui.filter.getAttribute('aria-invalid'), 'false');
+  ui.input('anything');
+  assert.equal(ui.filter.getAttribute('aria-invalid'), 'true');
+  ui.input('');
+  assert.equal(ui.filter.getAttribute('aria-invalid'), 'false');
+});
 
 /** `skill-atlas serve <port>` in a fresh directory, until it prints its URL. */
 async function serve(port: string, cwd: string) {
