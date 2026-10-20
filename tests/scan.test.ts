@@ -1,6 +1,5 @@
 // The decisions in spec/analysis.md and spec/cli.md, checked on what the real command prints for
-// ./fixture and for a small GitHub repository answered in tests/helpers.ts. The edge cases of
-// where skills live are yours to add.
+// ./fixture and for a small GitHub repository answered in tests/helpers.ts.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
@@ -8,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
+import { run } from '../src/commands.ts';
 import { openGitHub } from '../src/core/github.ts';
 import { parseSkill } from '../src/core/parse.ts';
 import { replay } from '../src/core/replay.ts';
@@ -49,6 +49,7 @@ test('./fixture: every skill, sorted by name, linked to its file, with a warning
       `  ${root}/.github/skills/code-style/SKILL.md`,
       'commits — Write commit messages the way this repository does.',
       `  ${root}/.claude/skills/commits/SKILL.md`,
+      '  also in agent/skills/commits/SKILL.md',
       'release-checklist',
       `  ${root}/.agents/skills/release-checklist/SKILL.md`,
     ].join('\n'),
@@ -91,4 +92,66 @@ test('rate limit → a message that asks for GITHUB_TOKEN', async () => {
   await assert.rejects(openGitHub('https://github.com/JetBrains/MPS', { fetch: limited }), {
     message: 'GitHub rate limit reached; set GITHUB_TOKEN',
   });
+});
+
+test('./fixture: anything but <root>/<name>/SKILL.md is not a skill', () => {
+  // Each one is a valid SKILL.md whose description starts with "Not a skill".
+  for (const name of ['at-the-root', 'in-the-root', 'too-deep', 'lowercase', 'notes', 'nested']) {
+    assert.doesNotMatch(fixture.stdout, new RegExp(`^${name}\\b`, 'm'));
+  }
+  assert.doesNotMatch(fixture.stdout, /Not a skill/);
+  // Not read either: the only warning is the malformed skill's.
+  assert.equal(fixture.stderr.split('\n').length, 1);
+});
+
+test('./fixture: the same <name> in two roots → one skill, its copy in "also in"', () => {
+  assert.equal(fixture.stdout.match(/^commits — /gm)?.length, 1);
+  assert.match(fixture.stdout, /\/\.claude\/skills\/commits\/SKILL\.md\n {2}also in agent\/skills\/commits\/SKILL\.md$/m);
+});
+
+test('GitHub: only <root>/<name>/SKILL.md, a name in several roots once, from the first root', async () => {
+  const commit = EXAMPLE_COMMIT;
+  const blob = (path: string) => ({ path, mode: '100644', type: 'blob', sha: '0' });
+  const raw = (path: string) => `https://raw.githubusercontent.com/JetBrains/roots/${commit}/${path}`;
+  const github = replay({
+    'https://api.github.com/repos/JetBrains/roots': { status: 200, body: { full_name: 'JetBrains/roots', default_branch: 'main' } },
+    'https://api.github.com/repos/JetBrains/roots/commits/main': { status: 200, body: { sha: commit } },
+    [`https://api.github.com/repos/JetBrains/roots/git/trees/${commit}?recursive=1`]: {
+      status: 200,
+      body: {
+        truncated: false,
+        tree: [
+          blob('SKILL.md'),
+          blob('agent/skills/review/SKILL.md'),
+          blob('.github/skills/review/SKILL.md'),
+          blob('.agents/skills/review/SKILL.md'),
+          blob('.agents/skills/review/nested/SKILL.md'),
+          blob('.claude/skills/SKILL.md'),
+          blob('.claude/skills/lower/skill.md'),
+          blob('docs/skills/notes/SKILL.md'),
+          blob('modules/a/.claude/skills/deep/SKILL.md'),
+        ],
+      },
+    },
+    // Only the skill is read: any other request is not recorded and fails the scan.
+    [raw('.agents/skills/review/SKILL.md')]: { status: 200, body: '---\ndescription: Review a change. Then approve.\n---\n' },
+  });
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  const code = await run(['scan', 'https://github.com/JetBrains/roots'], {
+    open: (input) => openGitHub(input, { fetch: github }),
+    print: (text) => stdout.push(text),
+    error: (text) => stderr.push(text),
+  });
+  assert.equal(code, 0, stderr.join('\n'));
+  assert.equal(stderr.join('\n'), '');
+  assert.equal(
+    stdout.join('\n'),
+    [
+      'JetBrains/roots · 1 skill',
+      'review — Review a change.',
+      `  https://github.com/JetBrains/roots/blob/${commit}/.agents/skills/review/SKILL.md`,
+      '  also in .github/skills/review/SKILL.md, agent/skills/review/SKILL.md',
+    ].join('\n'),
+  );
 });
