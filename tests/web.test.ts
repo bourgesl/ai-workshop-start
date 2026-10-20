@@ -199,7 +199,7 @@ test('GitHub: the link pins the scanned commit; the SKILL.md is the one at that 
 });
 
 test('no repository, or one that cannot be scanned → 400 and its message', async () => {
-  assert.deepEqual(await scanned(' '), { status: 400, body: { error: 'Enter a GitHub repository URL or a directory' } });
+  assert.deepEqual(await scanned(' '), { status: 400, body: { error: 'Enter a GitHub repository or account URL, or a directory' } });
 
   const missing = await scanned(join(FIXTURE, 'no-such-directory'));
   assert.equal(missing.status, 400);
