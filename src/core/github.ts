@@ -1,3 +1,4 @@
+import type { AccountSource, InputSource } from './account.ts';
 import { AtlasError } from './errors.ts';
 import { SKILL_ROOTS } from './find.ts';
 import type { Source } from './scan.ts';
@@ -20,8 +21,40 @@ export function parseGitHubUrl(input: string): { owner: string; repo: string } |
   return match ? { owner: match[1], repo: match[2] } : undefined;
 }
 
+/** A GitHub user or organization URL; repository URLs retain their existing meaning. */
+export function parseGitHubAccountUrl(input: string): string | undefined {
+  return /^(?:https?:\/\/)?(?:www\.)?github\.com\/([\w.-]+)\/?$/i.exec(input.trim())?.[1];
+}
+
+/** Opens a repository or lists every repository owned by a GitHub account. */
+export async function openGitHub(input: string, options: GitHubOptions): Promise<InputSource> {
+  const owner = parseGitHubAccountUrl(input);
+  if (!owner) return openRepository(input, options);
+  const github = client(options);
+  const account = await github.json<{ login: string; type: string }>(
+    `${API}/users/${owner}`, `Account not found: https://github.com/${owner}`,
+  );
+  const endpoint = account.type === 'Organization' ? `orgs/${account.login}` : `users/${account.login}`;
+  const type = account.type === 'Organization' ? 'all' : 'owner';
+  const repositories = new Map<string, AccountSource['repositories'][number]>();
+  for (let page = 1; ; page++) {
+    const items = await github.json<{ full_name: string }[]>(
+      `${API}/${endpoint}/repos?type=${type}&sort=full_name&per_page=100&page=${page}`,
+    );
+    for (const item of items) {
+      const url = `https://github.com/${item.full_name}`;
+      repositories.set(item.full_name, { id: item.full_name, url, open: () => openRepository(url, options) });
+    }
+    if (items.length < 100) break;
+  }
+  return {
+    account: { id: account.login, url: `https://github.com/${account.login}` },
+    repositories: [...repositories.values()].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  };
+}
+
 /** Resolves the default branch to a commit and lists the files that may be skills. */
-export async function openGitHub(input: string, options: GitHubOptions): Promise<Source> {
+async function openRepository(input: string, options: GitHubOptions): Promise<Source> {
   const name = parseGitHubUrl(input);
   if (!name) throw new AtlasError(`Not a GitHub repository URL: ${input}`);
   const github = client(options);
@@ -30,7 +63,14 @@ export async function openGitHub(input: string, options: GitHubOptions): Promise
     `Repository not found: https://github.com/${name.owner}/${name.repo}`,
   );
   const id = info.full_name;
-  const { sha } = await github.json<{ sha: string }>(`${API}/repos/${id}/commits/${encodePath(info.default_branch)}`);
+  let sha: string;
+  try {
+    ({ sha } = await github.json<{ sha: string }>(`${API}/repos/${id}/commits/${encodePath(info.default_branch)}`));
+  } catch (error) {
+    if (!(error instanceof EmptyRepositoryError)) throw error;
+    const [organization, name] = id.split('/');
+    return { repository: { id, organization, name, url: `https://github.com/${id}`, commit: '' }, paths: [], warnings: [], read: async () => undefined };
+  }
   const warnings: string[] = [];
   const paths = options.token ? await searchPaths(github, id) : await treePaths(github, id, sha, warnings);
   const [organization, repo] = id.split('/');
@@ -90,6 +130,8 @@ function files(tree: Tree): string[] {
   return tree.tree.filter((item) => item.type === 'blob' && item.mode !== '120000').map((item) => item.path);
 }
 
+class EmptyRepositoryError extends AtlasError {}
+
 type Client = ReturnType<typeof client>;
 
 function client({ fetch, token }: GitHubOptions) {
@@ -111,6 +153,7 @@ function client({ fetch, token }: GitHubOptions) {
     const body: unknown = await response.json().catch(() => undefined);
     const message = (body as { message?: unknown } | undefined)?.message;
     const text = typeof message === 'string' ? message : '';
+    if (response.status === 409 && /empty/i.test(text)) throw new EmptyRepositoryError(`Repository is empty: ${url}`);
     if (response.status === 404) throw new AtlasError(notFound);
     if ((response.status === 403 || response.status === 429) && /rate limit/i.test(text)) {
       throw new AtlasError(`GitHub rate limit reached; ${token ? 'try again in a minute' : 'set GITHUB_TOKEN'}`);

@@ -1,7 +1,7 @@
 // Runs the commands the way the CLI does, with GitHub answering from EXAMPLE below.
 import { fileURLToPath } from 'node:url';
 import { run } from '../src/commands.ts';
-import { openGitHub, parseGitHubUrl } from '../src/core/github.ts';
+import { openGitHub, parseGitHubUrl, parseGitHubAccountUrl } from '../src/core/github.ts';
 import { replay, type Recording } from '../src/core/replay.ts';
 import { openDirectory } from '../src/local.ts';
 
@@ -29,7 +29,7 @@ const github = replay(EXAMPLE);
 
 /** Opens what the CLI would, with GitHub answering from EXAMPLE, through code search as it answers it. */
 export const open = (input: string) =>
-  parseGitHubUrl(input) ? openGitHub(input, { fetch: github, token: 'test' }) : openDirectory(input);
+  (parseGitHubUrl(input) || parseGitHubAccountUrl(input)) ? openGitHub(input, { fetch: github, token: 'test' }) : openDirectory(input);
 
 /** `skill-atlas <args>`, as the CLI runs it, with GitHub answering from EXAMPLE. */
 export async function atlas(args: string[]) {

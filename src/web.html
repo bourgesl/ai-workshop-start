@@ -6,13 +6,16 @@
 <title>Skill Atlas</title>
 <style>
   :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-  body { margin: 0; display: grid; grid-template-rows: auto auto auto 1fr; height: 100vh; }
+  body { margin: 0; display: grid; grid-template-rows: auto auto auto auto 1fr; height: 100vh; }
   form { display: flex; gap: .5rem; padding: 1rem; border-bottom: 1px solid #8884; }
   form input { flex: 1; font: inherit; padding: .4rem .6rem; }
   form button { font: inherit; padding: .4rem 1rem; }
   #status { padding: .5rem 1rem; }
   #status .error { color: #d33; }
   #warnings { margin: .25rem 0 0; padding-left: 1.25rem; color: #b80; font-size: .9em; }
+  #repositories { padding: .5rem 1rem; overflow: auto; }
+  #repositories ul { padding-left: 1.25rem; }
+  #repositories li { margin: .5rem 0; }
   #filter-controls { display: flex; align-items: center; gap: .5rem; padding: .5rem 1rem; }
   #filter { font: inherit; padding: .4rem .6rem; }
   #filter[aria-invalid="true"] { border: 2px solid #d33; }
@@ -33,10 +36,11 @@
 <body>
 <form id="scan">
   <input id="repo" name="repo" type="text" required autofocus
-         placeholder="https://github.com/owner/repo, or a local directory" aria-label="Repository">
+         placeholder="https://github.com/owner[/repo], or a local directory" aria-label="Repository or GitHub account">
   <button type="submit">Scan</button>
 </form>
 <div id="status" role="status"></div>
+<section id="repositories" aria-label="Repositories" hidden></section>
 <div id="filter-controls" hidden>
   <label for="filter">Filter</label>
   <input id="filter" name="filter" type="text" aria-describedby="counts" aria-invalid="false">
@@ -56,6 +60,8 @@
   const controls = document.getElementById('filter-controls');
   const filter = document.getElementById('filter');
   const counts = document.getElementById('counts');
+  const repositories = document.getElementById('repositories');
+  let requestId = 0;
   let skills = [];
   let selected;
 
@@ -93,6 +99,9 @@
   filter.addEventListener('input', renderSkills);
 
   async function scan(input) {
+    const current = ++requestId;
+    repositories.hidden = true;
+    repositories.replaceChildren();
     status.replaceChildren(`Scanning ${input}…`);
     main.hidden = true;
     controls.hidden = true;
@@ -103,16 +112,36 @@
     } catch (error) {
       result = { error: `Cannot reach the Skill Atlas server: ${error.message}` };
     }
+    if (current !== requestId) return;
     if (result.error) return status.replaceChildren(element('span', { className: 'error', textContent: result.error }));
+    if (result.account) {
+      const total = result.repositories.reduce((sum, repository) => sum + (repository.result?.skills.length ?? 0), 0);
+      const incomplete = result.repositories.some((repository) => repository.error);
+      status.replaceChildren(element('strong', { textContent: result.account.id }),
+        ` · ${result.repositories.length} repositories · ${total} skills${incomplete ? ' · incomplete scan' : ''}`);
+      showWarnings(result.warnings);
+      repositories.replaceChildren(element('h2', { textContent: 'Repositories' }));
+      if (result.repositories.length === 0) repositories.append(element('p', { textContent: 'No repositories found.' }));
+      else repositories.append(element('ul', {}, ...result.repositories.map((repository) =>
+        element('li', {}, element('a', {
+          href: `/?repo=${encodeURIComponent(repository.url)}`, textContent: repository.id,
+        }), repository.error ? ` · scan failed: ${repository.error}` :
+          ` · ${repository.result.skills.length} ${repository.result.skills.length === 1 ? 'skill' : 'skills'}`))));
+      repositories.hidden = false;
+      return;
+    }
     const count = `${result.skills.length} ${result.skills.length === 1 ? 'skill' : 'skills'}`;
     status.replaceChildren(element('strong', { textContent: result.repository.id }), ` · ${count}`);
-    if (result.warnings.length > 0) {
-      status.append(element('ul', { id: 'warnings' }, ...result.warnings.map((warning) => element('li', { textContent: `warning: ${warning}` }))));
-    }
+    showWarnings(result.warnings);
     skills = result.skills;
     selected = undefined;
     controls.hidden = false;
     renderSkills();
+  }
+
+  function showWarnings(warnings) {
+    if (warnings.length > 0) status.append(element('ul', { id: 'warnings' },
+      ...warnings.map((warning) => element('li', { textContent: `warning: ${warning}` }))));
   }
 
   form.addEventListener('submit', (event) => {

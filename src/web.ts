@@ -4,23 +4,29 @@ import { readFileSync } from 'node:fs';
 import { createServer, type Server, type ServerResponse } from 'node:http';
 import { AtlasError } from './core/errors.ts';
 import { skillLink } from './core/model.ts';
-import { scan, type Source } from './core/scan.ts';
+import { scanInput, type InputSource } from './core/account.ts';
+import type { ScanResult } from './core/scan.ts';
 
 const PAGE = readFileSync(new URL('./web.html', import.meta.url));
 
 /** `GET /`: the page; `GET /api/scan?repo=<GitHub URL | directory>`: the scan, as JSON. */
-export function createWebServer(open: (input: string) => Promise<Source>): Server {
+export function createWebServer(open: (input: string) => Promise<InputSource>): Server {
   return createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
     if (request.method !== 'GET') return send(response, 405, 'text/plain', 'Method not allowed');
     if (url.pathname === '/') return send(response, 200, 'text/html; charset=utf-8', PAGE);
     if (url.pathname !== '/api/scan') return send(response, 404, 'text/plain', 'Not found');
     const input = url.searchParams.get('repo')?.trim();
-    if (!input) return json(response, 400, { error: 'Enter a GitHub repository URL or a directory' });
+    if (!input) return json(response, 400, { error: 'Enter a GitHub repository or account URL, or a directory' });
     try {
-      const result = await scan(await open(input));
-      const skills = result.skills.map((skill) => ({ ...skill, link: skillLink(result.repository, skill) }));
-      json(response, 200, { repository: result.repository, skills, warnings: result.warnings });
+      const result = await scanInput(await open(input));
+      json(response, 200, 'account' in result ? {
+        ...result,
+        repositories: result.repositories.map((repository) => ({
+          ...repository,
+          ...(repository.result ? { result: linked(repository.result) } : {}),
+        })),
+      } : linked(result));
     } catch (error) {
       if (error instanceof AtlasError) return json(response, 400, { error: error.message });
       json(response, 500, { error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}` });
@@ -47,4 +53,8 @@ function json(response: ServerResponse, status: number, body: unknown) {
 
 function send(response: ServerResponse, status: number, type: string, body: string | Buffer) {
   response.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store' }).end(body);
+}
+
+function linked(result: ScanResult) {
+  return { ...result, skills: result.skills.map((skill) => ({ ...skill, link: skillLink(result.repository, skill) })) };
 }
