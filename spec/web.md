@@ -17,6 +17,10 @@
 - A non-empty filter with no matches has a red border and `aria-invalid=true`; matching again or clearing it removes this state
 - Keep the selected skill when it matches; otherwise select the first match, or clear the detail view if there are no matches
 - Keep warnings visible while filtering, and apply the current filter to subsequent scans
+## Skill list presentation
+- Use compact rows separated by subtle dividers. Names wrap when needed; descriptions occupy one line with an ellipsis, retaining their full text in the accessible button name and a hover tooltip.
+- Mark the selected row with a colored leading border and background. Keyboard focus has a distinct outline; Enter or Space selects the focused skill.
+- At widths up to 640px, stack the list above the details, limit the list to 40% of the viewport height with scrolling, and keep the page free of horizontal overflow.
 ## API
 `GET /api/scan?repo=<GitHub URL | directory>` → JSON:
 `repository`; `skills`, each with its `link` and `markdown`; `warnings`

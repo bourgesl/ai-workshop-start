@@ -20,17 +20,27 @@
   #filter { font: inherit; padding: .4rem .6rem; }
   #filter[aria-invalid="true"] { border: 2px solid #d33; }
   [hidden] { display: none !important; }
-  main { display: grid; grid-template-columns: minmax(16rem, 1fr) 2fr; min-height: 0; border-top: 1px solid #8884; }
+  main { display: grid; grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr); min-height: 0; border-top: 1px solid #8884; }
   #skills { margin: 0; padding: 0; list-style: none; overflow: auto; border-right: 1px solid #8884; }
-  #skills button { all: unset; box-sizing: border-box; display: block; width: 100%; padding: .6rem 1rem; cursor: pointer; }
-  #skills button:hover, #skills button:focus-visible { background: #8882; }
-  #skills button[aria-current="true"] { background: #48f3; }
-  #skills .name { font-weight: 600; }
-  #skills .description { font-size: .9em; opacity: .8; }
-  #skill { overflow: auto; padding: 1rem; }
+  #skills li + li { border-top: 1px solid #8883; }
+  #skills button { all: unset; box-sizing: border-box; display: block; width: 100%; padding: .4rem .75rem; border-left: 3px solid transparent; cursor: pointer; line-height: 1.35; }
+  #skills button:hover { background: #8882; }
+  #skills button:focus-visible { outline: 2px solid #48f; outline-offset: -2px; }
+  #skills button[aria-current="true"] { background: #48f3; border-left-color: #48f; }
+  #skills .name { font-size: .9rem; font-weight: 600; overflow-wrap: anywhere; }
+  #skills .description { font-size: .8rem; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #skill { min-width: 0; overflow: auto; padding: 1rem; }
   #skill h2 { margin: 0 0 .25rem; }
   #skill .meta { font-size: .9em; margin-bottom: .75rem; word-break: break-all; }
   #skill pre { white-space: pre-wrap; word-wrap: break-word; margin: 0; padding: 1rem; background: #8881; border-radius: 4px; }
+  @media (max-width: 640px) {
+    body { height: auto; min-height: 100vh; }
+    form input { min-width: 0; }
+    #filter-controls { flex-wrap: wrap; }
+    #filter { min-width: 0; max-width: 100%; box-sizing: border-box; }
+    main { grid-template-columns: minmax(0, 1fr); }
+    #skills { max-height: 40vh; border-right: 0; border-bottom: 1px solid #8884; }
+  }
 </style>
 </head>
 <body>
@@ -86,7 +96,7 @@
     filter.setAttribute('aria-invalid', String(query.length > 0 && matches.length === 0));
     list.replaceChildren(...matches.map((skill) => {
       const button = element('button', { type: 'button' }, element('div', { className: 'name', textContent: skill.name }));
-      if (skill.description) button.append(element('div', { className: 'description', textContent: skill.description }));
+      if (skill.description) button.append(element('div', { className: 'description', textContent: skill.description, title: skill.description }));
       button.addEventListener('click', () => show(skill, button));
       return element('li', {}, button);
     }));
