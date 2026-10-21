@@ -26,13 +26,25 @@ export function parseSkill(text: string): ParsedSkill {
   // The leading newline keeps YAML's line numbers equal to the file's.
   const document = parseDocument(`\n${lines.slice(1, end).join('\n')}`);
   const [error] = document.errors;
-  if (error) return fallback(`malformed front matter: ${error.message.split('\n')[0].replace(/:$/, '')}`, body);
-  const data: unknown = document.toJS();
+  if (error) return malformed(error, body);
+  let data: unknown;
+  try {
+    // Conversion can reject aliases even when parsing reports no errors.
+    // Keep YAML's default alias limit and fall back like other malformed input.
+    data = document.toJS();
+  } catch (error) {
+    return malformed(error, body);
+  }
   if (typeof data !== 'object' || data === null || Array.isArray(data)) {
     return fallback('front matter is not a mapping', body);
   }
   const { name, description, ...properties } = data as Record<string, unknown>;
   return { name: asText(name) || undefined, description: asText(description), properties, body: trim(body) };
+}
+
+function malformed(error: unknown, body: string): ParsedSkill {
+  const message = error instanceof Error ? error.message : String(error);
+  return fallback(`malformed front matter: ${message.split('\n')[0].replace(/:$/, '')}`, body);
 }
 
 function fallback(reason: string, body: string): ParsedSkill {
