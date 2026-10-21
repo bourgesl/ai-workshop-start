@@ -2,7 +2,7 @@
 
 Find the agent skills your team already has, understand what they do, and open their original instructions—all from one place.
 
-[Watch the 30-second demo](air-file://mbp3kbm4qq6vpu1had45/workspaces/ai-workshop-start/docs/demo/test/demo-30s.mp4?type=file&root=%252F)
+[Watch the 30-second demo](https://raw.githubusercontent.com/bourgesl/ai-workshop-start/feb457228df3c7da4571084f46091e65738881c5/docs/demo/test/demo-30s.mp4)
 
 - **Explore repositories and organizations.** Scan a local directory, a GitHub repository, or the repositories listed for a GitHub user or organization.
 - **Find skills across agent conventions.** Discover skills in the supported Agents, Claude, GitHub, and agent skill folders. Duplicate names within a repository appear once, with their other locations listed.
