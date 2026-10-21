@@ -92,6 +92,65 @@ const filter = (page: Page) => page.locator('#filter');
 const counts = (page: Page) => page.locator('#counts');
 const selected = (page: Page) => page.locator('#skill h2');
 
+test('compact skill rows retain descriptions and show keyboard focus and selection', async ({ page, demo }) => {
+  await demo.scan(`https://github.com/${ORG}/agent-skills`);
+  const buttons = page.locator('#skills button');
+  await expect(buttons).toHaveCount(3);
+  for (const button of await buttons.all()) {
+    expect((await button.boundingBox())!.height).toBeLessThanOrEqual(52);
+  }
+  const description = buttons.nth(1).locator('.description');
+  const text = 'Write commit messages the way this repository does. Use for every commit.';
+  await expect(description).toHaveText(text);
+  await expect(description).toHaveAttribute('title', text);
+  await expect(buttons.nth(1)).toHaveAccessibleName(`commits ${text}`);
+  expect(await description.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+
+  await filter(page).focus();
+  await page.keyboard.press('Tab');
+  await expect(buttons.nth(0)).toBeFocused();
+  await expect(buttons.nth(0)).toHaveCSS('outline-style', 'solid');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  await expect(selected(page)).toHaveText('commits');
+  await expect(buttons.nth(1)).toHaveAttribute('aria-current', 'true');
+  await expect(buttons.nth(1)).toHaveCSS('border-left-color', 'rgb(68, 136, 255)');
+  await expect(buttons.nth(0)).toHaveAttribute('aria-current', 'false');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Space');
+  await expect(selected(page)).toHaveText('release-checklist');
+  await demo.shot('compact-list');
+});
+
+test('mobile skill list wraps long names and scrolls above the details without page overflow', async ({ page, demo }) => {
+  await page.setViewportSize({ width: 390, height: 720 });
+  const longName = 'long-skill-name-'.repeat(8);
+  await page.route('**/api/scan?*', async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    result.skills[0].name = longName;
+    result.skills = Array.from({ length: 20 }, (_, index) => ({
+      ...result.skills[index % 3], id: `skill-${index}`,
+    }));
+    await route.fulfill({ response, json: result });
+  });
+  await demo.scan(`https://github.com/${ORG}/agent-skills`);
+  await expect(page.locator('#skills button')).toHaveCount(20);
+  const list = page.locator('#skills');
+  const bounds = (await list.boundingBox())!;
+  expect(bounds.height).toBeLessThanOrEqual(290);
+  expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  const name = list.locator('.name').first();
+  await expect(name).toHaveText(longName);
+  expect(await name.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  const detail = (await page.locator('#skill').boundingBox())!;
+  expect(detail.y).toBeGreaterThanOrEqual(bounds.y + bounds.height);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await list.locator('button').nth(19).click();
+  await expect(selected(page)).toHaveText('commits');
+  await demo.shot('mobile-list');
+});
+
 test('repository scan lists its skills; the filter matches names ignoring letter case', async ({ page, demo }) => {
   await demo.caption('Skill Atlas · Filters and organization scans | Fixture organization');
   await demo.click(page.locator('#repo'));
