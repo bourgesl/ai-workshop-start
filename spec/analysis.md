@@ -11,6 +11,10 @@ Skill: id = `repo:path`, name, description, commit, its SKILL.md
 - The name: front matter, else the directory
 - The link pins the *scanned commit*
 - Malformed front matter → a *warning*, the scan goes on
+  - YAML conversion failures, including excessive or unresolved aliases, use the same fallback:
+    the directory name, an empty description and properties, and the Markdown body after the front matter.
+    Preserve the original SKILL.md and the YAML library's default alias safeguard;
+    other skills still appear in CLI and HTTP scan results (HTTP 200 with warnings).
 - Unreachable repository → a clear message, exit code 1
 ## What is a project skill?
 `<root>/<name>/SKILL.md`, `<root>` is one of:
