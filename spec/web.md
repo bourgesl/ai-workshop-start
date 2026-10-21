@@ -9,6 +9,7 @@
 - One skill selected, the first at first: its **SKILL.md** *as written*, front matter included
   - its **link**, pinned to the scanned commit; `also in <paths>` for copies
 - Warnings under the repository; an unreachable repository → its message, in the page
+- Status text wraps long unbroken repository identifiers instead of widening the page; the full identifier remains visible, including on mobile.
 - `/?repo=<link>` scans at once: a scan can be *shared as a link*
 ## Filtering
 - After a successful scan, a field labeled **Filter** filters skill names as you type, using case-insensitive substring matching (contains)
