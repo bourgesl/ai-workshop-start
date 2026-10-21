@@ -1,6 +1,6 @@
 # Red-agent skill
 
-The repository provides an adversarial web-view testing skill at `agents/red-agent/SKILL.md`, in the location requested for this workflow. This directory is not an additional project-skill discovery root for Skill Atlas.
+The repository provides an adversarial web-view testing skill at `../.agents/skills/red-agent`, in the location requested for this workflow. This directory is not an additional project-skill discovery root for Skill Atlas.
 
 - The skill evaluates the web view and scan API against the web specification and security trust boundaries, using synthetic inputs and local or explicitly authorized targets.
 - It confirms and minimizes failures, distinguishes functional regressions from demonstrated security impact, and retains a repeatable scenario and sanitized evidence for each distinct bug.

@@ -9,10 +9,10 @@ Find reproducible failures in the web view, prove their impact, and file one Git
 
 ## Establish the target
 
-1. Read the project's `AGENTS.md` and `spec/`, especially `spec/web.md`. Record the tested commit, working-tree changes, Node/browser versions, target URL, and relevant configuration without exposing secrets.
+1. Read the project's `../../../AGENTS.md` and `spec/`, especially `spec/web.md`. Record the tested commit, working-tree changes, Node/browser versions, target URL, and relevant configuration without exposing secrets.
 2. Use the specified target and issue repository. Otherwise use a disposable local instance of this checkout and resolve the GitHub repository from its Git remote (`gh repo view --json nameWithOwner,url`). Do not infer a separate deployment is authorized from the remote. Confirm ambiguity only when it blocks testing or reporting.
 3. Use synthetic repositories, temporary directories, marker files, and dummy credentials. Keep active attacks within the local instance or explicitly authorized targets. Require explicit scope for third-party systems, destructive tests, or sustained load. Do not read real secrets or send captured data elsewhere to demonstrate impact.
-4. Inspect existing dependencies before installing anything. Run `npm ci` first in a fresh checkout. Start the normal app with `./skill-atlas serve`; for deterministic GitHub scenarios, use `createWebServer` and `listen` from `src/web.ts`, `openGitHub` from `src/core/github.ts`, and `replay` from `src/core/replay.ts`. Bind local harnesses to `127.0.0.1` on an available port and close them afterwards.
+4. Inspect existing dependencies before installing anything. Run `npm ci` first in a fresh checkout. Start the normal app with `./skill-atlas serve`; for deterministic GitHub scenarios, use `createWebServer` and `listen` from `../../../src/web.ts`, `openGitHub` from `src/core/github.ts`, and `replay` from `src/core/replay.ts`. Bind local harnesses to `127.0.0.1` on an available port and close them afterwards.
 
 Creating this skill does not execute an audit. When invoked to perform an audit, issue filing is part of this workflow; do not request repetitive confirmation for each ordinary report in the authorized repository.
 
@@ -29,7 +29,7 @@ Read [references/attack-workflows.md](references/attack-workflows.md) to choose 
 
 ## Record each confirmed bug
 
-Read the existing [process-tracks skill](../../.agents/skills/process-tracks/SKILL.md) and its [sample scenario](../../.agents/skills/process-tracks/sample_demo.ts), linked relative to this skill directory. Also consult `e2e/web.spec.ts` and `playwright.config.ts` from the project root. Adapt the process-tracks scenario to the minimal failing case; do not rerun only its happy-path demo as bug evidence.
+Read the existing [process-tracks skill](../process-tracks/SKILL.md) and its [sample scenario](../process-tracks/sample_demo.ts), linked relative to this skill directory. Also consult `../../../e2e/web.spec.ts` and `playwright.config.ts` from the project root. Adapt the process-tracks scenario to the minimal failing case; do not rerun only its happy-path demo as bug evidence.
 
 1. Create a separate evidence directory per finding under `docs/demo/test/red-agent/<bug-slug>/`. When `AIR_ARTIFACTS_DIR` is set, place durable copies there, or append the evidence directory glob to `AIR_ARTIFACTS_WATCH_LIST` when available. Do not overwrite prior recordings.
 2. Record Chromium at a 1280×720 viewport and video size, using Playwright `recordVideo` or the existing test runner's `video: on`. Keep the caption banner, visible cursor, readable pacing, and screenshots from process-tracks. Captions describe the input, expected result, and observed failure; they must not obscure evidence or create the claimed effect.
